@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shoplifting Detection</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            padding: 20px;
+            /* Add the background image */
+            background-image: url('https://img.freepik.com/premium-photo/crowd-people-walking-through-store-with-blurry-background_1153744-136165.jpg'); 
+            background-size: cover; 
+            background-repeat: no-repeat; 
+            background-attachment: fixed; 
+        }
+        .container {
+            margin-top: 50px;
+            max-width: 600px;
+            background: rgba(30, 30, 30, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(255, 255, 255, 0.1);
+        }
+        .video-container {
+            margin: 20px auto;
+        }
+        video {
+            width: 100%;
+            border-radius: 10px;
+            border: 2px solid #ffcc00;
+        }
+        .prediction {
+            font-size: 1.5rem;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background-color:#44e3ff ;
+            border: none;
+            color: black;
+            font-weight: bold;
+        }
+        .btn-primary:hover {
+            background-color: #00e1ff73;
+        }
+        .frames-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .frame-item {
+            position: relative;
+            border: 2px solid #ff6b6b;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .frame-item:hover {
+            transform: scale(1.05);
+        }
+        .frame-item img {
+            width: 100%;
+            height: auto;
+        }
+        .frame-index {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .confidence-indicator {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: #ffcc00;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-bottom-left-radius: 5px;
+            font-weight: bold;
+        }
+        #suspicious-frames-section {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(20, 20, 20, 0.7);
+            border-radius: 8px;
+        }
+        .no-frames-message {
+            padding: 10px;
+            color: #ffcc00;
+            font-style: italic;
+        }
+        #loading-indicator {
+            display: none;
+            margin: 20px 0;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #44e3ff;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Full-screen modal styles */
+        .frame-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        
+        .frame-modal-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 90vh;
+            border: 3px solid #ff6b6b;
+            border-radius: 5px;
+            box-shadow: 0 4px 20px rgba(255, 0, 0, 0.3);
+        }
+        
+        .frame-modal-content img {
+            display: block;
+            max-width: 100%;
+            max-height: 85vh;
+            border-radius: 2px;
+        }
+        
+        .frame-modal-info {
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            width: 100%;
+            padding: 10px;
+            text-align: center;
+            margin-top: 10px;
+            border-radius: 5px;
+        }
+        
+        .frame-modal-close {
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            background-color: #ff3b3b;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            border: 2px solid white;
+            transition: all 0.2s;
+        }
+        
+        .frame-modal-close:hover {
+            background-color: #ff0000;
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 class="mb-4">🚨 Shoplifting Detection</h1>
+
+        <input type="file" id="videoInput" accept="video/*" class="form-control mb-3">
+
+        <div class="video-container">
+            {% if video_url %}
+                <video id="videoPlayer" controls>
+                    <source src="{{ video_url }}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            {% else %}
+                <video id="videoPlayer" controls>
+                    <source id="videoSource" src="" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            {% endif %}
+        </div>
+
+        <button class="btn btn-primary mt-3 w-100" onclick="uploadVideo()">🔍 Detect Theft</button>
+
+        <div id="loading-indicator">
+            <div class="spinner"></div>
+            <p>Analyzing video...</p>
+        </div>
+
+        <div class="prediction" id="predictionResult"></div>
+        
+        <!-- Suspicious Frames Section -->
+        <div id="suspicious-frames-section">
+            <h3 class="mt-4 mb-3">🔎 High Confidence Suspicious Frames</h3>
+            <p>These frames have the highest likelihood of containing shoplifting activity. 
+               <span class="text-warning">Only frames with 94%+ confidence are shown.</span></p>
+            <p class="text-info"><i>Click on any frame to view it in full screen</i></p>
+            <div id="suspicious-frames" class="frames-container"></div>
+        </div>
+    </div>
+    
+    <!-- Full-screen frame modal -->
+    <div id="frameModal" class="frame-modal">
+        <div class="frame-modal-content">
+            <div class="frame-modal-close" onclick="closeModal()">×</div>
+            <img id="modalImage" src="" alt="Suspicious Frame">
+            <div class="frame-modal-info">
+                <span id="modalFrameIndex">Frame #0</span> | 
+                <span id="modalConfidence">Confidence: 0%</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('videoInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+
+            if (file) {
+                if (!file.type.startsWith("video/")) {
+                    alert("⚠️ Please upload a valid video file.");
+                    return;
+                }
+
+                const url = URL.createObjectURL(file);
+
+                const video = document.getElementById('videoPlayer');
+                const source = document.getElementById('videoSource');
+
+                source.src = url;
+                video.load();
+            }
+        });
+
+        function uploadVideo() {
+            const fileInput = document.getElementById('videoInput');
+            if (!fileInput.files.length) {
+                alert("⚠️ Please upload a video first.");
+                return;
+            }
+
+            // Clear previous results
+            document.getElementById('predictionResult').innerHTML = "";
+            document.getElementById('suspicious-frames-section').style.display = 'none';
+            document.getElementById('suspicious-frames').innerHTML = '';
+            
+            // Show loading indicator
+            document.getElementById('loading-indicator').style.display = 'block';
+
+            const formData = new FormData();
+            formData.append('video', fileInput.files[0]);
+
+            fetch('/predict/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                // Check if the response is valid JSON
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return response.json();
+                } else {
+                    // If it's not JSON, throw an error with details
+                    return response.text().then(text => {
+                        throw new Error(`Server returned non-JSON response: ${text.substring(0, 150)}...`);
+                    });
+                }
+            })
+            .then(data => {
+                // Hide loading indicator
+                document.getElementById('loading-indicator').style.display = 'none';
+                
+                if (data.error) {
+                    document.getElementById('predictionResult').innerHTML = `❌ Error: ${data.error}`;
+                    return;
+                }
+
+                const predictionText = data.prediction === 1 ? "🚨 Theft Detected!" : "✅ No Theft Detected";
+                document.getElementById('predictionResult').innerHTML = `<strong>${predictionText}</strong> <br> Confidence: ${data.confidence}`;
+
+                if (data.video_url) {
+                    const video = document.getElementById('videoPlayer');
+                    const source = video.querySelector('source');
+                    source.src = data.video_url;
+                    video.load();
+                }
+                
+                // Only show frames section if theft is detected AND we have suspicious frames
+                if (data.prediction === 1 && data.suspicious_frames && data.suspicious_frames.length > 0) {
+                    const framesContainer = document.getElementById('suspicious-frames');
+                    document.getElementById('suspicious-frames-section').style.display = 'block';
+                    
+                    // Add each frame to the container
+                    data.suspicious_frames.forEach((frameUrl, index) => {
+                        const frameDiv = document.createElement('div');
+                        frameDiv.className = 'frame-item';
+                        
+                        const img = document.createElement('img');
+                        img.src = frameUrl;
+                        img.alt = 'Suspicious Frame';
+                        
+                        const indexSpan = document.createElement('div');
+                        indexSpan.className = 'frame-index';
+                        
+                        let frameIndex = index + 1;
+                        // If we have frame indices, show the actual frame number
+                        if (data.frame_indices && data.frame_indices.length > index) {
+                            frameIndex = data.frame_indices[index];
+                            indexSpan.textContent = `Frame #${frameIndex}`;
+                        } else {
+                            indexSpan.textContent = `Frame ${frameIndex}`;
+                        }
+                        
+                        // Add confidence indicator
+                        const confidenceSpan = document.createElement('div');
+                        confidenceSpan.className = 'confidence-indicator';
+                        
+                        let confidenceValue = 0;
+                        if (data.frame_confidences && data.frame_confidences.length > index) {
+                            confidenceValue = data.frame_confidences[index];
+                            
+                            // Use a different background color for frames below the 0.94 threshold
+                            if (confidenceValue < 0.94) {
+                                confidenceSpan.style.backgroundColor = "rgba(255, 165, 0, 0.8)"; // Orange for fallback frames
+                                confidenceSpan.style.color = "#000";
+                            }
+                            
+                            confidenceSpan.textContent = `${Math.round(confidenceValue * 100)}%`;
+                        }
+                        
+                        // Add click event to show full-screen view
+                        frameDiv.addEventListener('click', function() {
+                            openModal(frameUrl, frameIndex, confidenceValue);
+                        });
+                        
+                        frameDiv.appendChild(img);
+                        frameDiv.appendChild(indexSpan);
+                        frameDiv.appendChild(confidenceSpan);
+                        framesContainer.appendChild(frameDiv);
+                    });
+                } else if (data.prediction === 1) {
+                    // Show message if theft detected but no high confidence frames
+                    document.getElementById('suspicious-frames-section').style.display = 'block';
+                    document.getElementById('suspicious-frames').innerHTML = 
+                        '<div class="no-frames-message">No frames with 94%+ confidence were found. Check overall video result.</div>';
+                } else {
+                    // Hide frames section if no theft detected
+                    document.getElementById('suspicious-frames-section').style.display = 'none';
+                    document.getElementById('suspicious-frames').innerHTML = '';
+                }
+            })
+            .catch(error => {
+                document.getElementById('loading-indicator').style.display = 'none';
+                document.getElementById('predictionResult').innerHTML = `❌ Error: ${error.message}`;
+                console.error('Fetch error:', error);
+            });
+        }
+        
+        // Modal functions
+        function openModal(imageUrl, frameIndex, confidence) {
+            const modal = document.getElementById('frameModal');
+            const modalImage = document.getElementById('modalImage');
+            const modalFrameIndex = document.getElementById('modalFrameIndex');
+            const modalConfidence = document.getElementById('modalConfidence');
+            
+            // Set the image source
+            modalImage.src = imageUrl;
+            
+            // Set the frame information
+            modalFrameIndex.textContent = `Frame #${frameIndex}`;
+            modalConfidence.textContent = `Confidence: ${Math.round(confidence * 100)}%`;
+            
+            // Show the modal with a fade-in effect
+            modal.style.display = 'flex';
+            modal.style.opacity = 0;
+            setTimeout(() => {
+                modal.style.opacity = 1;
+            }, 10);
+            
+            // Add keyboard event listener for ESC key
+            document.addEventListener('keydown', handleEscKey);
+        }
+        
+        function closeModal() {
+            const modal = document.getElementById('frameModal');
+            modal.style.opacity = 0;
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300);
+            
+            // Remove keyboard event listener
+            document.removeEventListener('keydown', handleEscKey);
+        }
+        
+        function handleEscKey(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        }
+        
+        // Close modal when clicking outside the image
+        document.getElementById('frameModal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+
+</body>
+</html>
